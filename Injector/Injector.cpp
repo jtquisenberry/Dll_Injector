@@ -146,7 +146,7 @@ int main(int argc, char* argv[])
 
     printf("\n");
     printf("******************************\n");
-    printf("EXIT...");
+    printf("EXIT...\n");
     printf("******************************\n");
 
     return 0;

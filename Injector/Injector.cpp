@@ -8,6 +8,8 @@
 #include <wchar.h>
 #include <vector>
 #include <string>
+#include <codecvt>
+#include <locale>
 #pragma comment(lib, "ntdll")
 
 #include "stdafx.h"
@@ -20,73 +22,68 @@ HANDLE GetTargetExe(__in int pid);
 bool is_numeric(char* str);
 BOOL WINAPI InjectDll(__in HANDLE hProcess, __in LPCWSTR lpcwszDll);
 BOOL WINAPI InjectDll(__in PROCESS_INFORMATION pi, __in LPCWSTR lpcwszDll);
-DWORD GetMainThreadId(DWORD pId); 
 BOOL ListProcessThreads(DWORD dwOwnerPID);
-// BOOL ListProcessThreads(DWORD dwOwnerPID);
 bool is_numeric(string str);
+void PrintHelp(void);
+
+
+void PrintHelp()
+{
+    std::cout << "Usage: \n";
+    std::cout << "Injector.exe" << "--pid <PID> | --exe <Path> --dll <Path> [--log <Path>]\n";
+    std::cout << "Options:\n";
+    std::cout << "  -h, --help       Shows this help message\n";
+    std::cout << "  -v, --version    Shows the application version\n";
+    std::cout << "                                                \n";
+    std::cout << "Specify either a PID or an .EXE. If both a PID and an executable are  \n";
+    std::cout << "specified, the PID is used and the executable is ignored. \n";
+    std::cout << "      --pid <PID>  The process ID of a running process into which a .DLL will be injected.\n";
+    std::cout << "      --exe <Path> The fully-qualified filename of a non-running executable that will be.\n";
+    std::cout << "                   started and into which a .DLL will be injected.\n";
+    std::cout << "      --dll <Path> The fully-qualified filename of the .DLL to inject.\n";
+    std::cout << "      --log <Path> The fully-qualified filename of a log file. Optional.\n";
+}
+
 
 int main(int argc, char* argv[])
 {
     std::vector<std::string> arguments;
 
-    string logFile = "";
-    string bitmapFile = "";
-    string dcSource = "Default";
-    string printerName = "";
-    string pidString = "";
-    string targetPath = "";
-    wstring targetPathW = L"";
-    int pid = -999;
+    string strLogFile = "";
+    wstring wstrLogFile = L"";
+    string strPid = "";
+    string strExeFile = "";
+    wstring wstrExeFile = L"";
+    string strDllFile = "";
+    wstring wstrDllFile = L"";
+    int intPid = -1;
     
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
 
         if (arg == "-h" || arg == "--help") {
-            std::cout << "Usage: " << argv[0] << " [options]\n";
-            std::cout << "Options:\n";
-            std::cout << "  -h, --help  Show this help message\n";
+            PrintHelp();
         }
         else if (arg == "-v" || arg == "--version") {
-            std::cout << "MyProgram version 1.0\n";
+            std::cout << "Injector version 1.0\n";
         }
         else if (arg == "--pid") {
-            string pidString = argv[i + 1];
-            if (is_numeric(pidString)) {
-                pid = stoi(pidString);
+            strPid = argv[i + 1];
+            if (is_numeric(strPid)) {
+                intPid = stoi(strPid);
             }
         }
         else if (arg == "--exe") {
-            string targetPath = argv[i + 1];
-            std::wstring targetPathW2(&targetPath[0], &targetPath[targetPath.length()]);
-            targetPathW = targetPathW2;
-            int debug_breakpoint = 0;
+            strExeFile = argv[i + 1];
+            wstrExeFile = std::wstring_convert<std::codecvt_utf8<wchar_t>>().from_bytes(strExeFile);
         }
-        else if (arg == "--logfile") {
-            logFile = argv[i + 1];
+        else if (arg == "--log") {
+            strLogFile = argv[i + 1];
+            wstrLogFile = std::wstring_convert<std::codecvt_utf8<wchar_t>>().from_bytes(strExeFile);
         }
-        else if (arg == "--bitmap") {
-            bitmapFile = argv[i + 1];
-        }
-        else if (arg == "--printerName") {
-            printerName = argv[i + 1];
-        }
-        else if (arg == "--source") {
-            string temp = argv[i + 1];
-            if (temp == "Default") {
-                dcSource = temp;
-            }
-            else if (temp == "User") {
-                dcSource = temp;
-            }
-            else if (temp == "Desktop") {
-                dcSource = temp;
-            }
-            else if (temp == "Name") {
-                dcSource = temp;
-            }
-            else if (temp == "Both") {
-                dcSource = temp;
-            }
+        else if (arg == "--dll") {
+            strDllFile = argv[i + 1];
+            wstrDllFile = std::wstring_convert<std::codecvt_utf8<wchar_t>>().from_bytes(strDllFile);
         }
         else {
             arguments.push_back(arg);
@@ -102,17 +99,19 @@ int main(int argc, char* argv[])
     HANDLE hProcess;
     PROCESS_INFORMATION pi;
 
-    // wstring targetPathW = L"";
-
     wchar_t selfdir[MAX_PATH] = { 0 };
     GetModuleFileName(NULL, selfdir, MAX_PATH);
     PathRemoveFileSpec(selfdir);
-    std::wstring dllPath = std::wstring(selfdir) + TEXT("\\hooks2.dll");
 
-    if (pid > 0) {
-        hProcess = GetTargetExe(pid);
+    if (wstrDllFile == L"")
+    {
+        wstrDllFile = std::wstring(selfdir) + TEXT("\\hooks2.dll");
+    }
 
-        if (InjectDll(hProcess, dllPath.c_str())) {
+    if (intPid > 0) {
+        hProcess = GetTargetExe(intPid);
+
+        if (InjectDll(hProcess, wstrDllFile.c_str())) {
             printf("Dll was successfully injected.\n");
         }
         else {
@@ -120,14 +119,14 @@ int main(int argc, char* argv[])
         }
     }
     else { 
-        if (targetPathW == L"") {
-            targetPathW = wstring(selfdir) + L"\\target.exe";
+        if (wstrExeFile == L"") {
+            wstrExeFile = wstring(selfdir) + L"\\target.exe";
         }
         
-        pi = StartTargetExe(targetPathW.c_str());
+        pi = StartTargetExe(wstrExeFile.c_str());
 
         //InjectDll(hProcess);
-        if (InjectDll(pi, dllPath.c_str())) {
+        if (InjectDll(pi, wstrDllFile.c_str())) {
             printf("\n");
             printf("******************************\n");
             printf("Dll was successfully injected.\n");
@@ -227,8 +226,6 @@ BOOL WINAPI InjectDll(__in HANDLE hProcess, __in LPCWSTR lpcwszDll)
     LPVOID lpLoadLibraryW = NULL;
     LPVOID lpRemoteString;
 
-
-
     lpLoadLibraryW = GetProcAddress(GetModuleHandle(L"KERNEL32.DLL"), "LoadLibraryW");
 
     if (!lpLoadLibraryW)
@@ -280,6 +277,11 @@ BOOL WINAPI InjectDll(__in HANDLE hProcess, __in LPCWSTR lpcwszDll)
         /*
         ResumeThread(processInformation.hThread);
         */
+
+        //resume suspended process
+
+        ResumeThread(hThread);
+
     }
 
     //  free allocated memory
@@ -363,12 +365,6 @@ BOOL WINAPI InjectDll(__in PROCESS_INFORMATION processInformation, __in LPCWSTR 
 
     return TRUE;
 }
-
-
-
-
-
-
 
 
 
